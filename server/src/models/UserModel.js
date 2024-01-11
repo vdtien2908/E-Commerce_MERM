@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
 var userSchema = new mongoose.Schema(
     {
@@ -50,7 +51,7 @@ var userSchema = new mongoose.Schema(
             type: String,
         },
         passwordResetExpires: {
-            type: string,
+            type: String,
         },
     },
     {
