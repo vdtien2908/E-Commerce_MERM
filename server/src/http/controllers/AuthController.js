@@ -9,8 +9,8 @@ const {
     generateRefreshToken,
 } = require('../middlewares/jwt');
 
-class UserController {
-    // [POST] /api/user/register
+class AuthController {
+    // [POST] /api/auth/register
     register = asyncHandle(async (req, res) => {
         const { email, password, firstName, lastName, mobile } = req.body;
         if (!email || !password || !firstName || !lastName || !mobile) {
@@ -33,7 +33,7 @@ class UserController {
         });
     });
 
-    // [POST] /api/user/login
+    // [POST] /api/auth/login
     login = asyncHandle(async (req, res) => {
         const { email, password } = req.body;
         if (!email || !password) {
@@ -46,7 +46,8 @@ class UserController {
         const user = await User.findOne({ email });
         const isCheckPass = await user.isCorrectPassword(password);
         if (user && isCheckPass) {
-            const { password, role, ...userFilter } = user.toObject();
+            const { password, role, refreshToken, ...userFilter } =
+                user.toObject();
 
             // Create accessToken
             // + Authentication
@@ -55,17 +56,17 @@ class UserController {
 
             // Create refreshToken
             // + RefreshToken has a new function of accessToken
-            const refreshToken = generateRefreshToken(userFilter._id);
+            const NewRefreshToken = generateRefreshToken(userFilter._id);
 
             // Save refreshToken to database
             await User.findByIdAndUpdate(
                 userFilter._id,
-                { refreshToken },
+                { refreshToken: NewRefreshToken },
                 { new: true }
             );
 
             // Save refreshToken to cookie
-            res.cookie('refreshToken', refreshToken, {
+            res.cookie('refreshToken', NewRefreshToken, {
                 httpOnly: true, // Only method 'http'
                 maxAge: 7 * 24 * 60 * 60 * 1000, // Set time cookie
             });
@@ -74,7 +75,6 @@ class UserController {
                 success: true,
                 data: {
                     accessToken,
-                    refreshToken,
                     user: userFilter,
                 },
             });
@@ -83,19 +83,19 @@ class UserController {
         }
     });
 
-    // [GET] /api/user/current-user
+    // [GET] /api/auth/current-user
     getCurrent = asyncHandle(async (req, res) => {
         const { _id } = req.user;
         const user = await User.findById({ _id }).select(
             '-refreshToken -password -role'
         );
         return res.status(200).json({
-            success: true,
+            success: user ? true : false,
             data: user ? user : 'User not found',
         });
     });
 
-    // [POST] /api/user/refreshToken
+    // [POST] /api/auth/refreshToken
     refreshAccessToken = asyncHandle(async (req, res) => {
         const cookie = req.cookies;
         if (!cookie && !cookie.refreshToken) {
@@ -120,7 +120,7 @@ class UserController {
         });
     });
 
-    // [GET] /api/user/logout
+    // [GET] /api/auth/logout
     logout = asyncHandle(async (req, res) => {
         const cookie = req.cookies;
         if (!cookie || !cookie.refreshToken) {
@@ -139,7 +139,7 @@ class UserController {
         });
     });
 
-    // [GET] /api/user/forgot-password?email=demo@example.com
+    // [GET] /api/auth/forgot-password?email=demo@example.com
     forgotPassword = asyncHandle(async (req, res) => {
         const { email } = req.query;
 
@@ -163,7 +163,7 @@ class UserController {
         const html = `
         <p>
             Xin vui lòng click vào đây để thay đổi mật khẩu. Link này sẽ hết hạn sau 15 phút từ lúc bạn nhận được. 
-            <a href="${process.env.URL_SERVER}/api/user/reset-password/${resetToken}">
+            <a href="${process.env.URL_SERVER}/api/auth/reset-password/${resetToken}">
                 Bấm vào đây để thay đổi mật khẩu
             </a>
         <p/>
@@ -179,7 +179,7 @@ class UserController {
         });
     });
 
-    // [PUT] /api/user/reset-password
+    // [PUT] /api/auth/reset-password
     resetPassword = asyncHandle(async (req, res) => {
         const { password, token } = req.body;
 
@@ -214,4 +214,4 @@ class UserController {
     });
 }
 
-module.exports = new UserController();
+module.exports = new AuthController();

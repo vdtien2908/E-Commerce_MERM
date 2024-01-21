@@ -1,9 +1,13 @@
-const userRouter = require('./User');
 const { notFound, errHandler } = require('../http/middlewares/errHandler');
 
-const initRoutes = (app) => {
-    app.use('/api/user', userRouter);
+const authRouter = require('./authRouter');
+const userRouter = require('./userRouter');
 
+const initRoutes = (app) => {
+    app.use('/api/auth', authRouter);
+    app.use('/api/users', userRouter);
+
+    // Handle error
     app.use(notFound);
     app.use(errHandler);
 };
