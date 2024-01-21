@@ -1,6 +1,8 @@
 const asyncHandle = require('express-async-handler');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
+const sendMail = require('../../utils/sendMail');
 const User = require('../../models/UserModel');
 const {
     generateAccessToken,
@@ -28,7 +30,6 @@ class UserController {
         return res.status(200).json({
             success: response ? true : false,
             message: 'Create user successfully!',
-            data: response,
         });
     });
 
@@ -65,8 +66,8 @@ class UserController {
 
             // Save refreshToken to cookie
             res.cookie('refreshToken', refreshToken, {
-                httpOnly: true,
-                maxAge: 7 * 24 * 60 * 60 * 1000,
+                httpOnly: true, // Only method 'http'
+                maxAge: 7 * 24 * 60 * 60 * 1000, // Set time cookie
             });
 
             return res.status(200).json({
@@ -83,7 +84,7 @@ class UserController {
     });
 
     // [GET] /api/user/current-user
-    getCurrent = asyncHandle(async (req, res, next) => {
+    getCurrent = asyncHandle(async (req, res) => {
         const { _id } = req.user;
         const user = await User.findById({ _id }).select(
             '-refreshToken -password -role'
@@ -95,7 +96,7 @@ class UserController {
     });
 
     // [POST] /api/user/refreshToken
-    refreshAccessToken = asyncHandle(async (req, res, next) => {
+    refreshAccessToken = asyncHandle(async (req, res) => {
         const cookie = req.cookies;
         if (!cookie && !cookie.refreshToken) {
             throw new Error('No refresh token in cookies');
@@ -120,7 +121,7 @@ class UserController {
     });
 
     // [GET] /api/user/logout
-    logout = asyncHandle(async (req, res, next) => {
+    logout = asyncHandle(async (req, res) => {
         const cookie = req.cookies;
         if (!cookie || !cookie.refreshToken) {
             throw new Error('No refresh token in cookies');
@@ -135,6 +136,80 @@ class UserController {
         res.status(200).json({
             success: true,
             message: 'Logout successfully',
+        });
+    });
+
+    // [GET] /api/user/forgot-password?email=demo@example.com
+    forgotPassword = asyncHandle(async (req, res) => {
+        const { email } = req.query;
+
+        if (!email) {
+            throw new Error('Missing email');
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            throw new Error('User not found!');
+        }
+
+        // Create reset password token
+        const resetToken = user.createPasswordChangeToke();
+        // Save reset password token
+        await user.save();
+
+        // - Send Email
+        // Create content email
+        const html = `
+        <p>
+            Xin vui lòng click vào đây để thay đổi mật khẩu. Link này sẽ hết hạn sau 15 phút từ lúc bạn nhận được. 
+            <a href="${process.env.URL_SERVER}/api/user/reset-password/${resetToken}">
+                Bấm vào đây để thay đổi mật khẩu
+            </a>
+        <p/>
+        `;
+        const data = {
+            email,
+            html,
+        };
+        const response = await sendMail(data);
+        return res.status(200).json({
+            success: true,
+            response,
+        });
+    });
+
+    // [PUT] /api/user/reset-password
+    resetPassword = asyncHandle(async (req, res) => {
+        const { password, token } = req.body;
+
+        if (!password || !token) {
+            throw new Error('Missing inputs');
+        }
+
+        const passwordResetToken = crypto
+            .createHash('sha256')
+            .update(token)
+            .digest('hex');
+
+        const user = await User.findOne({
+            passwordResetToken,
+            passwordResetExpires: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            throw new Error('Invalid reset token');
+        }
+
+        user.password = password;
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        user.passwordChangeAt = Date.now();
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Update password successfully',
         });
     });
 }
