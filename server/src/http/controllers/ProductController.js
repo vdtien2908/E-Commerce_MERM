@@ -35,13 +35,33 @@ class ProductController {
         });
     });
 
-    // [GET] /api/products/ !!!!!!!
+    // [GET] /api/products?_query
     getProducts = asyncHandler(async (req, res) => {
-        const products = await Product.find();
+        const queries = { ...req.query };
+        const excludeFields = ['limit', 'sort', 'page', 'fields'];
+        excludeFields.forEach((item) => delete queries[item]);
+
+        // Sort
+        let queryString = JSON.stringify(queries);
+        queryString.replace(/\b(gte|gt|lt|lte)\b/g, (item) => `$${item}`);
+        const formatQueries = JSON.parse(queryString);
+
+        // Filtering
+        if (queries?.title) {
+            formatQueries.title = { $regex: queries.title, $options: 'i' };
+        }
+
+        let queryCommand = Product.find(formatQueries);
+
+        // Execute query
+
+        const response = await queryCommand.exec();
+        const counts = await Product.find(formatQueries).countDocuments();
 
         return res.status(200).json({
-            success: products ? true : false,
-            products: products ? products : 'Can not get products',
+            success: response ? true : false,
+            counts: counts,
+            products: response ? response : 'Can not get products',
         });
     });
 
@@ -61,6 +81,59 @@ class ProductController {
             updatedProduct: updatedProduct
                 ? updatedProduct
                 : 'Can not update product',
+        });
+    });
+
+    // [PUT] /api/products/rating
+    ratings = asyncHandler(async (req, res) => {
+        const { _id } = req.user;
+        const { star, comment, pid } = req.body;
+
+        if (!pid || !star) {
+            throw new Error('Missing inputs');
+        }
+        const ratingProduct = await Product.findById(pid);
+        const alreadyRating = ratingProduct?.ratings?.find(
+            (item) => item.postedBy.toString() === _id
+        );
+        if (alreadyRating) {
+            // Update & comment
+            await Product.updateOne(
+                {
+                    ratings: { $elemMatch: alreadyRating },
+                },
+                {
+                    $set: {
+                        'ratings.$.star': star,
+                        'ratings.$.comment': comment,
+                    },
+                },
+                { new: true }
+            );
+        } else {
+            // add star & comment
+            await Product.findByIdAndUpdate(
+                pid,
+                { $push: { ratings: { star, comment, postedBy: _id } } },
+                { new: true }
+            );
+        }
+
+        const updateProduct = await Product.findById(pid);
+        const ratingCount = updateProduct.ratings.length;
+        const sumRatings = updateProduct.ratings.reduce((sum, item) => {
+            return sum + item.star;
+        }, 0);
+        console.log(ratingCount);
+        console.log(sumRatings);
+        updateProduct.totalRatings =
+            Math.round((sumRatings * 10) / ratingCount) / 10;
+
+        await updateProduct.save();
+
+        return res.status(200).json({
+            success: true,
+            updateProduct,
         });
     });
 

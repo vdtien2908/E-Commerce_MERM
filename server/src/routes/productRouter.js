@@ -8,6 +8,7 @@ const {
 
 router.post('/', [verifyAccessToken, isAdmin], ProductController.createProduct);
 router.get('/', ProductController.getProducts);
+router.put('/ratings', [verifyAccessToken], ProductController.ratings);
 router.put(
     '/:pid',
     [verifyAccessToken, isAdmin],

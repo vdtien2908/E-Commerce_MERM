@@ -47,9 +47,9 @@ var productSchema = new mongoose.Schema(
             type: String,
             enum: ['Black', 'Grown', 'Red'],
         },
-        rating: [
+        ratings: [
             {
-                start: { type: Number },
+                star: { type: Number },
                 postedBy: { type: mongoose.Types.ObjectId, ref: 'User' },
                 comment: { type: String },
             },
